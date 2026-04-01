@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nexura — Client Performance Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --black: #0a0a0a; --dark: #111; --card: #161616; --border: #222;
+      --gold: #c9a84c; --gold-light: #e8c97a; --white: #f5f5f5; --muted: #777;
+      --green: #4ade80; --red: #f87171; --blue: #60a5fa;
+    }
+    body { background: var(--black); color: var(--white); font-family: 'Inter', sans-serif; min-height: 100vh; }
+
+    /* TOPBAR */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.2rem 2.5rem; border-bottom: 1px solid var(--border);
+      background: var(--dark); position: sticky; top: 0; z-index: 50;
+    }
+    .logo { font-size: 1.3rem; font-weight: 800; letter-spacing: 0.12em;
+      background: linear-gradient(135deg, var(--gold), var(--gold-light));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .topbar-right { display: flex; align-items: center; gap: 1.5rem; }
+    .venue-select {
+      background: var(--card); border: 1px solid var(--border); color: var(--white);
+      padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.88rem; font-family: 'Inter', sans-serif;
+      cursor: pointer;
+    }
+    .date-badge {
+      background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.25);
+      color: var(--gold); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em;
+      padding: 0.4rem 0.9rem; border-radius: 100px;
+    }
+    .status-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50; display: inline-block; margin-right: 0.4rem; }
+
+    /* MAIN LAYOUT */
+    .main { padding: 2rem 2.5rem; max-width: 1400px; margin: 0 auto; }
+    .page-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem; }
+    .page-sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 2rem; }
+
+    /* KPI CARDS */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .kpi-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1.5rem; position: relative; overflow: hidden;
+    }
+    .kpi-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--gold), var(--gold-light));
+    }
+    .kpi-label { color: var(--muted); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.8rem; }
+    .kpi-value { font-size: 2rem; font-weight: 900; letter-spacing: -0.02em; margin-bottom: 0.4rem; }
+    .kpi-change { font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 0.3rem; }
+    .kpi-change.up { color: var(--green); }
+    .kpi-change.down { color: var(--red); }
+
+    /* CHARTS GRID */
+    .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+    .charts-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
+    .chart-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem;
+    }
+    .chart-title { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .chart-sub { color: var(--muted); font-size: 0.78rem; margin-bottom: 1.2rem; }
+    .chart-wrap { position: relative; }
+
+    /* TABLE */
+    .table-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; }
+    .table-head { padding: 1.2rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .table-head h3 { font-size: 0.9rem; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.8rem 1.5rem; text-align: left; border-bottom: 1px solid var(--border); }
+    tbody td { padding: 0.9rem 1.5rem; font-size: 0.88rem; border-bottom: 1px solid rgba(34,34,34,0.6); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    .tag { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 100px; font-size: 0.72rem; font-weight: 600; }
+    .tag-green { background: rgba(74,222,128,0.12); color: var(--green); }
+    .tag-gold { background: rgba(201,168,76,0.12); color: var(--gold); }
+    .tag-red { background: rgba(248,113,113,0.12); color: var(--red); }
+
+    /* BOTTOM ROW */
+    .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+
+    /* ACTIVITY FEED */
+    .activity-list { list-style: none; }
+    .activity-item { display: flex; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--border); }
+    .activity-item:last-child { border-bottom: none; }
+    .act-icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(201,168,76,0.1); display: flex; align-items: center; justify-content: center; font-size: 0.9rem; flex-shrink: 0; }
+    .act-body { flex: 1; }
+    .act-body strong { font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 0.15rem; }
+    .act-body span { color: var(--muted); font-size: 0.78rem; }
+    .act-time { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+
+    /* CHANNEL BREAKDOWN */
+    .channel-list { list-style: none; }
+    .channel-item { display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border); }
+    .channel-item:last-child { border-bottom: none; }
+    .ch-bar-wrap { flex: 1; background: var(--border); border-radius: 100px; height: 6px; }
+    .ch-bar { height: 6px; border-radius: 100px; background: linear-gradient(90deg, var(--gold), var(--gold-light)); }
+    .ch-name { font-size: 0.82rem; min-width: 100px; color: var(--white); }
+    .ch-value { font-size: 0.82rem; font-weight: 700; color: var(--gold); min-width: 50px; text-align: right; }
+  </style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">NEXURA</div>
+  <div class="topbar-right">
+    <select class="venue-select" onchange="switchVenue(this.value)">
+      <option value="foundry">The Foundry — Shoreditch</option>
+      <option value="aldgate">Aldgate Social — City</option>
+      <option value="lion">The Gilded Lion — Mayfair</option>
+    </select>
+    <div class="date-badge">Apr 2026 · Live</div>
+    <span><span class="status-dot"></span><span style="font-size:0.82rem;color:var(--muted)">All systems live</span></span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="page-title" id="venueName">The Foundry — Shoreditch</div>
+  <div class="page-sub">Performance dashboard · Updated just now</div>
+
+  <!-- KPI CARDS -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Monthly Revenue</div>
+      <div class="kpi-value" style="background:linear-gradient(135deg,var(--gold),var(--gold-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent">£62,400</div>
+      <div class="kpi-change up">▲ 24% vs last month</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Covers This Month</div>
+      <div class="kpi-value">3,841</div>
+      <div class="kpi-change up">▲ 18% vs last month</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Avg. Spend / Head</div>
+      <div class="kpi-value">£16.24</div>
+      <div class="kpi-change up">▲ £2.80 vs last month</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Table Utilisation</div>
+      <div class="kpi-value">78%</div>
+      <div class="kpi-change up">▲ 12% vs last month</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Google Rating</div>
+      <div class="kpi-value">4.8 ★</div>
+      <div class="kpi-change up">▲ 0.4 pts vs 3mo ago</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Email List</div>
+      <div class="kpi-value">2,147</div>
+      <div class="kpi-change up">▲ 312 new subscribers</div>
+    </div>
+  </div>
+
+  <!-- MAIN CHARTS ROW -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Revenue Over Time</div>
+      <div class="chart-sub">Monthly revenue vs target (£)</div>
+      <div class="chart-wrap"><canvas id="revenueChart" height="220"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Traffic Sources</div>
+      <div class="chart-sub">Visitor acquisition breakdown</div>
+      <div class="chart-wrap"><canvas id="trafficChart" height="220"></canvas></div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 2 -->
+  <div class="charts-grid-3">
+    <div class="chart-card">
+      <div class="chart-title">Weekly Covers</div>
+      <div class="chart-sub">This month by day of week</div>
+      <div class="chart-wrap"><canvas id="coversChart" height="180"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Campaign Performance</div>
+      <div class="chart-sub">ROAS by channel this month</div>
+      <div class="chart-wrap"><canvas id="roasChart" height="180"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Review Volume</div>
+      <div class="chart-sub">New reviews per week (last 8 wks)</div>
+      <div class="chart-wrap"><canvas id="reviewChart" height="180"></canvas></div>
+    </div>
+  </div>
+
+  <!-- CAMPAIGNS TABLE -->
+  <div class="table-card">
+    <div class="table-head">
+      <h3>Active Campaigns</h3>
+      <span style="color:var(--muted);font-size:0.8rem">April 2026</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Campaign</th>
+          <th>Channel</th>
+          <th>Spend</th>
+          <th>Revenue</th>
+          <th>ROAS</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Sunday Roast Push</td>
+          <td>Meta Ads</td>
+          <td>£480</td>
+          <td>£2,160</td>
+          <td style="color:var(--green);font-weight:700">4.5×</td>
+          <td><span class="tag tag-green">Live</span></td>
+        </tr>
+        <tr>
+          <td>Craft Beer Email Series</td>
+          <td>Email</td>
+          <td>£0</td>
+          <td>£1,840</td>
+          <td style="color:var(--green);font-weight:700">∞</td>
+          <td><span class="tag tag-green">Live</span></td>
+        </tr>
+        <tr>
+          <td>Google Local Ads</td>
+          <td>Google</td>
+          <td>£320</td>
+          <td>£1,100</td>
+          <td style="color:var(--gold);font-weight:700">3.4×</td>
+          <td><span class="tag tag-green">Live</span></td>
+        </tr>
+        <tr>
+          <td>Thursday Quiz Night</td>
+          <td>Instagram</td>
+          <td>£150</td>
+          <td>£690</td>
+          <td style="color:var(--gold);font-weight:700">4.6×</td>
+          <td><span class="tag tag-gold">Paused</span></td>
+        </tr>
+        <tr>
+          <td>Bank Holiday Weekend</td>
+          <td>Multi-channel</td>
+          <td>£600</td>
+          <td>£4,200</td>
+          <td style="color:var(--green);font-weight:700">7.0×</td>
+          <td><span class="tag tag-green">Live</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- BOTTOM ROW -->
+  <div class="bottom-grid">
+    <!-- ACTIVITY FEED -->
+    <div class="chart-card">
+      <div class="chart-title">Recent Activity</div>
+      <div class="chart-sub">Latest campaign & venue events</div>
+      <ul class="activity-list" style="margin-top:1rem">
+        <li class="activity-item">
+          <div class="act-icon">📧</div>
+          <div class="act-body"><strong>Email campaign sent — 2,147 subscribers</strong><span>Bank Holiday Sunday Roast offer · 38.4% open rate</span></div>
+          <div class="act-time">2h ago</div>
+        </li>
+        <li class="activity-item">
+          <div class="act-icon">⭐</div>
+          <div class="act-body"><strong>New 5-star Google review</strong><span>"Best Sunday roast in Shoreditch. Will be back."</span></div>
+          <div class="act-time">4h ago</div>
+        </li>
+        <li class="activity-item">
+          <div class="act-icon">📱</div>
+          <div class="act-body"><strong>Instagram post published</strong><span>Friday happy hour reel · 1,240 views in 3h</span></div>
+          <div class="act-time">6h ago</div>
+        </li>
+        <li class="activity-item">
+          <div class="act-icon">📊</div>
+          <div class="act-body"><strong>Monthly report generated</strong><span>Sent to venue owner automatically</span></div>
+          <div class="act-time">Yesterday</div>
+        </li>
+        <li class="activity-item">
+          <div class="act-icon">🎯</div>
+          <div class="act-body"><strong>Meta campaign budget optimised</strong><span>Shifted £120 from underperforming ad set</span></div>
+          <div class="act-time">Yesterday</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- CHANNEL BREAKDOWN -->
+    <div class="chart-card">
+      <div class="chart-title">Revenue by Channel</div>
+      <div class="chart-sub">Attribution this month</div>
+      <ul class="channel-list" style="margin-top:1rem">
+        <li class="channel-item">
+          <span class="ch-name">Meta Ads</span>
+          <div class="ch-bar-wrap"><div class="ch-bar" style="width:68%"></div></div>
+          <span class="ch-value">£18.4K</span>
+        </li>
+        <li class="channel-item">
+          <span class="ch-name">Email</span>
+          <div class="ch-bar-wrap"><div class="ch-bar" style="width:52%"></div></div>
+          <span class="ch-value">£14.1K</span>
+        </li>
+        <li class="channel-item">
+          <span class="ch-name">Google</span>
+          <div class="ch-bar-wrap"><div class="ch-bar" style="width:44%"></div></div>
+          <span class="ch-value">£11.9K</span>
+        </li>
+        <li class="channel-item">
+          <span class="ch-name">Organic SEO</span>
+          <div class="ch-bar-wrap"><div class="ch-bar" style="width:35%"></div></div>
+          <span class="ch-value">£9.5K</span>
+        </li>
+        <li class="channel-item">
+          <span class="ch-name">Instagram</span>
+          <div class="ch-bar-wrap"><div class="ch-bar" style="width:28%"></div></div>
+          <span class="ch-value">£7.6K</span>
+        </li>
+        <li class="channel-item">
+          <span class="ch-name">Direct / Other</span>
+          <div class="ch-bar-wrap"><div class="ch-bar" style="width:4%"></div></div>
+          <span class="ch-value">£0.9K</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  const gold = '#c9a84c';
+  const goldLight = '#e8c97a';
+  const border = '#222';
+  const muted = '#666';
+  const green = '#4ade80';
+  const blue = '#60a5fa';
+
+  Chart.defaults.color = '#777';
+  Chart.defaults.borderColor = '#222';
+  Chart.defaults.font.family = 'Inter';
+
+  // Revenue Chart
+  new Chart(document.getElementById('revenueChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'],
+      datasets: [
+        {
+          label: 'Actual Revenue',
+          data: [38000, 41200, 52800, 44100, 49600, 55300, 62400],
+          backgroundColor: 'rgba(201,168,76,0.7)',
+          borderRadius: 4,
+        },
+        {
+          label: 'Target',
+          data: [40000, 42000, 50000, 45000, 50000, 55000, 60000],
+          type: 'line',
+          borderColor: green,
+          borderDash: [4, 4],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3,
+        }
+      ]
+    },
+    options: {
+      plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        y: { ticks: { callback: v => '£' + (v/1000).toFixed(0) + 'K' } }
+      }
+    }
+  });
+
+  // Traffic Doughnut
+  new Chart(document.getElementById('trafficChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Organic Search', 'Social', 'Email', 'Paid', 'Direct'],
+      datasets: [{
+        data: [31, 24, 18, 20, 7],
+        backgroundColor: [gold, '#5b8dee', green, '#f59e0b', '#888'],
+        borderWidth: 0,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      cutout: '68%',
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } }
+    }
+  });
+
+  // Covers by Day
+  new Chart(document.getElementById('coversChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      datasets: [{
+        label: 'Covers',
+        data: [210, 240, 310, 420, 680, 820, 720],
+        backgroundColor: 'rgba(201,168,76,0.65)',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+
+  // ROAS by Channel
+  new Chart(document.getElementById('roasChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Meta', 'Google', 'Instagram', 'TikTok'],
+      datasets: [{
+        label: 'ROAS',
+        data: [4.5, 3.4, 4.6, 2.8],
+        backgroundColor: [gold, blue, '#f472b6', '#a78bfa'],
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { callback: v => v + '×' } } }
+    }
+  });
+
+  // Review Volume
+  new Chart(document.getElementById('reviewChart'), {
+    type: 'line',
+    data: {
+      labels: ['Wk1','Wk2','Wk3','Wk4','Wk5','Wk6','Wk7','Wk8'],
+      datasets: [{
+        label: 'Reviews',
+        data: [3, 5, 4, 8, 6, 11, 9, 14],
+        borderColor: green,
+        backgroundColor: 'rgba(74,222,128,0.08)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+
+  // Venue switcher
+  const venues = {
+    foundry: 'The Foundry — Shoreditch',
+    aldgate: 'Aldgate Social — City of London',
+    lion: 'The Gilded Lion — Mayfair',
+  };
+  function switchVenue(v) {
+    document.getElementById('venueName').textContent = venues[v];
+  }
+</script>
+</body>
+</html>
